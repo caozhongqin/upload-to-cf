@@ -14,6 +14,7 @@
 
 // ============================================================
 // 认证：校验 API Key（密码）
+// KV 里只需存一条：键名 "API_KEY"，值就是你的密码
 // ============================================================
 async function validateApiKey(request, env) {
   const authHeader = request.headers.get('Authorization');
@@ -27,8 +28,8 @@ async function validateApiKey(request, env) {
     token = token.slice(7);
   }
 
-  const result = await env.API_KEYS.get(token);
-  return result !== null;
+  const correctKey = await env.API_KEYS.get('API_KEY');
+  return correctKey !== null && token === correctKey;
 }
 
 // ============================================================
