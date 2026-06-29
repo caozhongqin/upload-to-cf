@@ -11,16 +11,28 @@ npm run dev          # wrangler dev
 # Deploy to Cloudflare
 npm run deploy       # wrangler deploy
 
+# Type-check the project
+npx tsc --noEmit
+
+# Regenerate Worker types from wrangler.toml bindings
+npx wrangler types
+
 # Initialize D1 database tables
 npx wrangler d1 execute upload-db --file=schema.sql
 
+# Run a single SQL command against D1
+npx wrangler d1 execute upload-db --command="SELECT * FROM files;"
+
 # Set an API key in KV
-npx wrangler kv:key put --namespace-id=<KV_ID> "sk-your-key" "active"
+npx wrangler kv:key put --namespace-id=<KV_ID> "API_KEY" "your-secret"
 
 # Create R2 bucket, D1 database, or KV namespace
 npx wrangler r2 bucket create upload-files
 npx wrangler d1 create upload-db
 npx wrangler kv:namespace create API_KEYS
+
+# Tail live production logs
+npx wrangler tail
 ```
 
 ## Project Overview
@@ -45,19 +57,31 @@ Request → index.ts (router) → auth.ts (API key check via KV)
 ```
 
 ### Key behaviors
-- **One-time download**: After streaming the file from R2 to the client, `download.ts` schedules a `ctx.waitUntil()` callback that deletes the file from R2 and its metadata row from D1.
-- **24-hour auto-expiry**: The `upload.ts` sets `expires_at` to now + 24h. `cleanup.ts` runs on a cron schedule (`0 * * * *`) to delete expired records from both R2 and D1.
-- **Auth**: Every route except `/health` requires an `Authorization: Bearer sk-xxx` header. Tokens are validated by looking them up in KV (existence check only).
+- **One-time download**: After streaming the file from R2 to the client, `download.ts` schedules a `ctx.waitUntil()` callback that deletes the file from R2 and its metadata row from D1. The response is returned before cleanup completes.
+- **24-hour auto-expiry**: `upload.ts` sets `expires_at` to now + 24h. `cleanup.ts` runs on cron (`0 * * * *`) and deletes expired D1 rows and matching R2 objects.
+- **Auth**: Every route except `/health` requires an `Authorization: Bearer <token>` header. `auth.ts` does a direct KV lookup for key `API_KEY` on every request — no caching layer.
 
-### File metadata schema (D1)
-`schema.sql` defines a `files` table with columns: key (PK), filename, size, content_type, created_at, expires_at, downloaded (boolean flag, currently unused in cleanup logic — expired records are found by timestamp only).
+### D1 schema (`schema.sql`)
+The `files` table has columns: `key` (PK), `filename`, `size`, `content_type`, `created_at`, `expires_at`, `downloaded` (boolean, default 0).
 
-### Key points about the code
-- File keys are 4-character alphanumeric (`[a-z0-9]{4}`), generated with collision retry, with a timestamp-based fallback.
-- Max file size: 100MB (enforced in `upload.ts`).
-- R2 bucket binding: `FILES_BUCKET`, D1 binding: `DB`, KV binding: `API_KEYS` — all defined in `wrangler.toml` and typed in `src/types.ts`.
-- The Worker uses ES2022 modules format with `@cloudflare/workers-types` for type checking.
-- No test framework is currently configured.
+**Notable nuance about `downloaded`:** The column is queried in `download.ts` (`WHERE ... AND downloaded = 0`) but is **never set to 1**. Instead, rows are deleted outright after download via `DELETE FROM files WHERE key = ?`. The `downloaded` column and its index (`idx_files_downloaded`) are effectively unused — only the `expires_at` index matters for the cleanup query. The column exists as a potential optimization if behavior were changed to soft-delete instead of hard-delete.
+
+### Key code details
+- **Key generation** (`upload.ts`): 4-character alphanumeric (`[a-z0-9]{4}`), with up to 10 collision-retry attempts against D1. Falls back to a timestamp-based key (`Date.now().toString(36).slice(-4)`) if all retries are exhausted.
+- **Max file size**: 100MB (enforced via `fileBuffer.byteLength` check in `upload.ts`).
+- **Error handling** (`download.ts`): If the D1 record exists but the R2 object is missing (inconsistent state), the D1 record is cleaned up and a 404 is returned.
+- **Cleanup resilience** (`cleanup.ts`): Each expired file is deleted independently — a single failure doesn't abort the batch. Errors are logged per-file.
+- **Auth format**: Accepts both `Bearer sk-xxx` and bare `sk-xxx` in the Authorization header.
+- **Bindings**: `FILES_BUCKET` (R2), `DB` (D1), `API_KEYS` (KV) — defined in `wrangler.toml` and typed via `src/types.ts`.
+- **Format**: ES2022 modules with `@cloudflare/workers-types` for type checking.
+- **Tests**: No test framework is currently configured.
+
+### Error response format
+All error responses follow a uniform shape:
+```json
+{ "error": "Human-readable error message." }
+```
+HTTP status codes used: 400 (bad request), 401 (unauthorized), 404 (not found), 413 (file too large), and a catch-all 404 for unknown routes.
 
 ## Setting up a new deployment
 
@@ -65,6 +89,7 @@ Request → index.ts (router) → auth.ts (API key check via KV)
 2. Create R2 bucket (`wrangler r2 bucket create upload-files`)
 3. Create D1 database (`wrangler d1 create upload-db`) and copy the `database_id` into `wrangler.toml`
 4. Run the schema (`wrangler d1 execute upload-db --file=schema.sql`)
-5. Create KV namespace (`wrangler kv:namespace create API_KEYS`) and copy the `id` into `wrangler.toml`
-6. Insert an API key into KV
-7. Deploy with `npm run deploy`
+5. Regenerate types: `npx wrangler types`
+6. Create KV namespace (`wrangler kv:namespace create API_KEYS`) and copy the `id` into `wrangler.toml`
+7. Insert an API key into KV (key name: `API_KEY`)
+8. Deploy with `npm run deploy`
