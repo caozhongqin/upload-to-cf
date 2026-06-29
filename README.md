@@ -23,7 +23,7 @@
 ## 项目结构
 
 ```
-upload-to-cf/
+upload/
 ├── src/
 │   ├── index.ts       # Worker 入口 & 路由
 │   ├── auth.ts        # API Key 认证
@@ -110,7 +110,7 @@ npx wrangler kv:key put --namespace-id=xxxxxxxx "sk-my-token-123" "active"
 npm run deploy
 ```
 
-部署完成后会输出你的 Worker 域名，例如 `https://upload-to-cf.xxx.workers.dev`。
+部署完成后会输出你的 Worker 域名，例如 `https://upload.xxx.workers.dev`。
 
 ## 使用方法
 

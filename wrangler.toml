@@ -1,4 +1,4 @@
-name = "upload-to-cf"
+name = "upload"
 main = "src/index.ts"
 compatibility_date = "2024-06-20"
 
