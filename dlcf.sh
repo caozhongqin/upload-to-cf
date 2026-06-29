@@ -29,10 +29,22 @@ HTTP_CODE=$(curl -s -D "$HEADERS" -o "$TMPFILE" -w "%{http_code}" \
   "$SERVER/download/$KEY")
 
 if [ "$HTTP_CODE" != "200" ]; then
+  # Read error message from response body before cleanup
+  ERROR_MSG=$(grep -o '"error":"[^"]*"' "$TMPFILE" 2>/dev/null | cut -d'"' -f4 || echo "Unknown error")
   rm -f "$TMPFILE" "$HEADERS"
-  # Print the error message from response body
-  ERROR_MSG=$(cat "$TMPFILE" 2>/dev/null | grep -o '"error":"[^"]*"' | cut -d'"' -f4 || echo "HTTP $HTTP_CODE")
-  echo "Download failed: $ERROR_MSG" >&2
+
+  # Map HTTP status code to a human-readable message
+  case "$HTTP_CODE" in
+    400) DESC="Bad request（请求格式错误）" ;;
+    401) DESC="Unauthorized - check UPLOAD_API_KEY（认证失败，检查 API Key）" ;;
+    404) DESC="File not found or already expired（文件未找到或已过期）" ;;
+    413) DESC="File too large（文件过大）" ;;
+    429) DESC="Download limit reached（下载次数已达上限）" ;;
+    500) DESC="Server error（服务器错误）" ;;
+    *)   DESC="Unexpected error（未知错误）" ;;
+  esac
+
+  echo "Download failed ($HTTP_CODE): $DESC — $ERROR_MSG" >&2
   exit 1
 fi
 
