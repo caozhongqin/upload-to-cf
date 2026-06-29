@@ -12,7 +12,8 @@
 - 对方通过短码下载文件，**下载后自动删除**（阅后即焚）
 - 文件 24 小时后自动过期删除（即使没人下载）
 - 需要 API Key 才能上传/下载，别人没有密码就没办法用
-- 单个文件最大 100MB
+- 单个文件最大 100MB（可通过 KV 配置调整或取消限制）
+- 支持限流配置：每日上传/下载次数上限、文件大小上限（可选，不限默认）
 
 ## 部署指南（网页点点点版）
 
@@ -64,6 +65,13 @@ CREATE TABLE IF NOT EXISTS files (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   expires_at TEXT NOT NULL,
   downloaded INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS daily_usage (
+  date TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (date, action_type)
 );
 ```
 
@@ -254,6 +262,56 @@ curl -o 下载的文件名.zip \
 
 ---
 
+## 限流配置（可选）
+
+如果你的 API Key 不慎泄露，可能导致接口被滥用、Cloudflare 额度超标。项目支持通过 KV 配置三项限制，**不配置则不受限制**。
+
+所有限制通过 KV 中的三个键控制（同一个 KV 命名空间 `API_KEYS`，就是存密码的那个）：
+
+| KV 键名 | 说明 | 示例值 |
+|---------|------|--------|
+| `CONFIG_LIMIT_FILE_SIZE_MB` | 单文件大小上限（单位 MB） | `"100"` 表示最大 100MB |
+| `CONFIG_LIMIT_DAILY_UPLOAD` | 每天最多上传次数 | `"1000"` 表示每天最多 1000 次 |
+| `CONFIG_LIMIT_DAILY_DOWNLOAD` | 每天最多下载次数 | `"10000"` 表示每天最多 10000 次 |
+
+### 设置方法
+
+去 Cloudflare 控制台 → KV 命名空间 `API_KEYS` → 添加键值对：
+
+```
+键名：CONFIG_LIMIT_DAILY_UPLOAD
+值：1000
+```
+
+或者用命令行：
+```bash
+# 设置单文件最大 50MB
+npx wrangler kv:key put --binding=API_KEYS "CONFIG_LIMIT_FILE_SIZE_MB" "50"
+
+# 设置每日最多上传 100 次
+npx wrangler kv:key put --binding=API_KEYS "CONFIG_LIMIT_DAILY_UPLOAD" "100"
+
+# 设置每日最多下载 500 次
+npx wrangler kv:key put --binding=API_KEYS "CONFIG_LIMIT_DAILY_DOWNLOAD" "500"
+
+# 删除配置（取消限制）
+npx wrangler kv:key delete --binding=API_KEYS "CONFIG_LIMIT_FILE_SIZE_MB"
+```
+
+### 限制命中时的响应
+
+超过限制时会返回 HTTP 429，提示已用次数和上限：
+
+```json
+{
+  "error": "Daily upload limit reached (100/100). Please try again later.（每日上传次数已达上限 100 次）"
+}
+```
+
+> 每日计数以 UTC 日期为准，计数数据保留 7 天后自动清理。
+
+---
+
 ## 常见问题
 
 ### 怎么改密码？
@@ -266,7 +324,7 @@ curl -o 下载的文件名.zip \
 
 ### 文件上传失败？
 
-- 检查文件大小不超过 100MB
+- 检查文件大小是否超过限制（默认 100MB，可在 KV 中调整）
 - 检查密码是否正确（`Authorization: Bearer 你的密码`）
 - 访问 `/health` 确认服务在运行
 
@@ -287,6 +345,7 @@ src/
 ├── upload.ts      # 上传处理
 ├── download.ts    # 下载处理
 ├── cleanup.ts     # 定时清理过期文件
+├── limits.ts      # 限流配置与每日计数
 └── types.ts       # TypeScript 类型定义
 schema.sql         # D1 建表语句
 wrangler.toml      # Cloudflare 配置（终端部署用）

@@ -1,4 +1,5 @@
 import type { Env } from './types';
+import { getLimitConfig, checkAndIncrementDailyLimit } from './limits';
 
 // Generate a 4-character alphanumeric key
 function generateKey(): string {
@@ -37,12 +38,39 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   const file = fileField as unknown as File;
   const fileBuffer = await file.arrayBuffer();
 
-  // Check file size (max 100MB)
-  if (fileBuffer.byteLength > 100 * 1024 * 1024) {
-    return new Response(JSON.stringify({ error: 'File too large. Maximum size is 100MB.' }), {
-      status: 413,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  // Load limit configuration from KV
+  const limitConfig = await getLimitConfig(env);
+
+  // Check file size limit (MB)
+  if (limitConfig.maxFileSizeMB !== null) {
+    const maxBytes = limitConfig.maxFileSizeMB * 1024 * 1024;
+    if (fileBuffer.byteLength > maxBytes) {
+      return new Response(
+        JSON.stringify({
+          error: `File too large. Maximum size is ${limitConfig.maxFileSizeMB}MB.（文件过大，最大允许 ${limitConfig.maxFileSizeMB}MB）`,
+        }),
+        {
+          status: 413,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+  }
+
+  // Check daily upload limit
+  if (limitConfig.dailyUploadLimit !== null) {
+    const result = await checkAndIncrementDailyLimit(env, 'upload', limitConfig.dailyUploadLimit);
+    if (!result.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: `Daily upload limit reached (${result.current}/${result.limit}). Please try again later.（每日上传次数已达上限 ${result.limit} 次）`,
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
   }
 
   // Generate unique key

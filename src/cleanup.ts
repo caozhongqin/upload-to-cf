@@ -18,6 +18,16 @@ export async function handleCleanup(env: Env): Promise<void> {
 
   console.log(`Cleanup: found ${expiredRecords.results.length} expired file(s).`);
 
+  // Clean up daily_usage records older than 7 days
+  try {
+    const usageResult = await env.DB.prepare(
+      "DELETE FROM daily_usage WHERE date < date('now', '-7 days')",
+    ).run();
+    console.log(`Cleanup: removed ${usageResult.meta.changes ?? 0} outdated daily_usage record(s).`);
+  } catch (err) {
+    console.error('Cleanup: failed to purge daily_usage:', err);
+  }
+
   for (const record of expiredRecords.results) {
     try {
       // Delete from R2

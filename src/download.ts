@@ -1,4 +1,5 @@
 import type { Env } from './types';
+import { getLimitConfig, checkAndIncrementDailyLimit } from './limits';
 
 export async function handleDownload(request: Request, env: Env, ctx: ExecutionContext, key: string): Promise<Response> {
   // Look up file metadata in D1
@@ -13,6 +14,23 @@ export async function handleDownload(request: Request, env: Env, ctx: ExecutionC
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Check daily download limit (after confirming file exists)
+  const limitConfig = await getLimitConfig(env);
+  if (limitConfig.dailyDownloadLimit !== null) {
+    const result = await checkAndIncrementDailyLimit(env, 'download', limitConfig.dailyDownloadLimit);
+    if (!result.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: `Daily download limit reached (${result.current}/${result.limit}). Please try again later.（每日下载次数已达上限 ${result.limit} 次）`,
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
   }
 
   // Get file from R2

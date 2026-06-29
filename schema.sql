@@ -10,3 +10,11 @@ CREATE TABLE IF NOT EXISTS files (
 
 CREATE INDEX IF NOT EXISTS idx_files_expires_at ON files(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_downloaded ON files(downloaded);
+
+-- Daily usage tracking for rate limiting, reset automatically per UTC day
+CREATE TABLE IF NOT EXISTS daily_usage (
+  date TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (date, action_type)
+);
