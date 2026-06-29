@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+dist/
+*.test.ts
+*.spec.ts
+src/**/*.test.ts
+src/**/*.spec.ts
