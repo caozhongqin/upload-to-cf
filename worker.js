@@ -28,7 +28,7 @@ async function validateApiKey(request, env) {
     token = token.slice(7);
   }
 
-  const correctKey = await env.API_KEYS.get('API_KEYS');
+  const correctKey = await env.API_KEYS.get('API_KEY');
   return correctKey !== null && token === correctKey;
 }
 
