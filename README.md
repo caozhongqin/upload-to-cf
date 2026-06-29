@@ -206,6 +206,36 @@ curl -X POST https://upload.你的用户名.workers.dev/upload \
 
 把 `key`（比如 `a3f8`）发给对方就行。
 
+### 使用 helper 脚本（推荐）
+
+项目提供了两个辅助脚本，配合环境变量使用更方便：
+
+**设置环境变量（一次设置，长期有效）**
+
+把下面两行加到你的 `~/.bashrc`（或 `~/.zshrc`）：
+```bash
+export UPLOAD_SERVER=https://upload.你的用户名.workers.dev
+export UPLOAD_API_KEY=你的密码
+```
+
+然后执行 `source ~/.bashrc` 生效。
+
+**上传文件**
+```bash
+./upcf.sh /路径/到/文件.zip
+# 输出: a3f8
+```
+
+**下载文件**
+```bash
+./dlcf.sh a3f8
+# 恢复到原始文件名保存
+./dlcf.sh a3f8 自定义名称.zip
+# 指定文件名保存
+```
+
+如果没设 `UPLOAD_SERVER`，脚本会报错提示设置。
+
 ### 下载文件
 
 对方在终端运行：
