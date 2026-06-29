@@ -11,12 +11,12 @@ bucket_name = "upload-files"
 [[d1_databases]]
 binding = "DB"
 database_name = "upload-db"
-database_id = ""
+database_id = "039ca970-bf6b-4534-8ad3-f7545d7bbd15"
 
 # KV namespace for API keys
 [[kv_namespaces]]
 binding = "API_KEYS"
-id = ""
+id = "dedefacfc3ef4ffa96366fbe800b2bc0"
 
 # Cron trigger: cleanup expired files every hour
 [triggers]
