@@ -15,6 +15,6 @@ export async function validateApiKey(request: Request, env: Env): Promise<boolea
     token = token.slice(7);
   }
 
-  const correctKey = await env.API_KEYS.get('API_KEY');
+  const correctKey = await env.API_KEYS.get('API_KEYS');
   return correctKey !== null && token === correctKey;
 }
