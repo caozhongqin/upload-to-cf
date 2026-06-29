@@ -1,0 +1,23 @@
+name = "upload-to-cf"
+main = "src/index.ts"
+compatibility_date = "2024-06-20"
+
+# R2 bucket for file storage
+[[r2_buckets]]
+binding = "FILES_BUCKET"
+bucket_name = "upload-files"
+
+# D1 database for file metadata
+[[d1_databases]]
+binding = "DB"
+database_name = "upload-db"
+database_id = ""
+
+# KV namespace for API keys
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = ""
+
+# Cron trigger: cleanup expired files every hour
+[triggers]
+crons = ["0 * * * *"]
